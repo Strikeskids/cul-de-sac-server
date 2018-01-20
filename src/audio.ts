@@ -4,8 +4,12 @@ const zeroBufferSamples = 8192;
 const zeroBuffer = Buffer.alloc(zeroBufferSamples * 2);
 const sampleRate = 48000;
 
+type Source =
+	| { kind: 'buffer', data: Buffer }
+	| { kind: 'stream', data: NodeJS.WritableStream }
+
 export class AudioStager extends Readable {
-	buffers : Array<Buffer>;
+	private buffers : Array<Source>;
 	currentEnd : number;
 	paused : boolean;
 	timer : NodeJS.Timer;
@@ -25,7 +29,7 @@ export class AudioStager extends Readable {
 		data.forEach((el, i) => {
 			buf.writeInt16LE(el, i*2);
 		});
-		this.buffers.push(buf);
+		this.buffers.push({kind: 'buffer', data: buf});
 		if (this.paused) this._doRead();
 		return start;
 	}
@@ -34,11 +38,14 @@ export class AudioStager extends Readable {
 		clearTimeout(this.timer);
 
 		this.paused = true;
-		while (this.buffers.length > 0) {
-			const buf = this.buffers.shift();
-
+		let buf = this.buffers.shift();
+		while (buf !== undefined) {
 			this.paused = false;
-			if (!this.push(buf)) return;
+			if (buf.kind === 'buffer') {
+				if (!this.push(buf.data)) return;
+			}
+
+			buf = this.buffers.shift();
 		}
 
 		this.timer = setTimeout(() => {
