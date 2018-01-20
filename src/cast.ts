@@ -65,25 +65,25 @@ export class CastBrowser {
 }
 
 export class Cast {
-	encoder : Encoder;
-	castEntity : CastEntity;
-	audio : AudioStager;
+	private encoder : Encoder;
 
+	audio : AudioStager;
+	output : NodeJS.ReadableStream;
+
+	castEntity : CastEntity;
+
+	ip : string;
 	port : number;
 	url : string;
 
-	launched = false;
-	ip : string;
-	started = false;
-
-	constructor(audio : AudioStager, castEntity : CastEntity, port : number, url : string) {
+	constructor (audio : AudioStager, castEntity : CastEntity, port : number, url : string) {
 		this.castEntity = castEntity;
 		this.audio = audio;
 
 		this.port = port;
 		this.url = url;
 
-		this.encoder = new Encoder({
+		this.output = this.encoder = new Encoder({
 			channels: 1,
 			bitDepth: 16,
 			sampleRate: 44100,
@@ -93,15 +93,17 @@ export class Cast {
 			mode: MONO,
 		});
 
+		this.audio.pipe(this.encoder, {end: false});
 		this.ip = getIp();
 	}
 
-	launchMedia() {
+	launchMedia () {
 		let host = this.castEntity.ip;
 		let client = new CastClient();
 
 		client.connect(host, () => {
-			console.log('Connected');
+			console.log('Connected to %s', host);
+
 			client.launch(DefaultMediaReceiver, (err : any, player : any) => {
 				const media = {
 					contentId: 'http://' + this.ip + ':' + this.port + '/' + this.url,
@@ -116,60 +118,55 @@ export class Cast {
 				};
 
 				player.load(media, { autoplay: true }, (err : any, status : string) => {
-					console.log('err=%s playerState=%s', err, status);
+					console.log('Load', err, status);
 				});
 			});
 		});
 
 		client.on('error', (err) => {
-			console.error('Error: %s', err.message);
+			console.error('Error', err);
 			client.close();
 		});
 	}
 }
 
-export class CastServer {
+export class CastApplication {
+	private casts : Map<string, Cast>;
+
 	app : express.Application;
-	server : Server;
 
-	encoders : Map<string, Cast>;
+	port : number;
+	url = 'beamfhoming.mp3';
 
-	url = 'data.mp3';
-	port = 5555;
+	constructor (port : number) {
+		this.port = port;
 
-	constructor () {
-		this.encoders = new Map();
+		this.casts = new Map();
 		this.app = express();
+
 		this.app.get(`/${this.url}`, (req, res) => {
-			console.log(utils.parseIP(req.ip));
-			let incomingIP = utils.parseIP(req.ip);
-			let cast = this.encoders.get(incomingIP);
+			console.log(parseIP(req.ip));
+
+			const incomingIP = parseIP(req.ip);
+			const cast = this.casts.get(incomingIP);
+
 			if (cast !== undefined) {
 				res.set({
 					'Content-Type': 'audio/mpeg',
 					'Transfer-Encoding': 'chunked',
 				});
 
-				cast.encoder.pipe(res);
-
-				if (!cast.started) {
-					cast.started = true;
-					cast.audio.pipe(cast.encoder);
-				}
+				cast.output.pipe(res);
 			} else {
 				console.log(incomingIP);
-				res.sendStatus(404)
+				res.sendStatus(404);
 			}
 		});
 	}
 
 	addStream (audio : AudioStager, castEntity : CastEntity) : Cast {
 		let cast = new Cast(audio, castEntity, this.port, this.url);
-		this.encoders.set(castEntity.ip, cast);
-		return cast
-	}
-
-	start() {
-		this.server = this.app.listen(this.port);
+		this.casts.set(castEntity.ip, cast);
+		return cast;
 	}
 }
