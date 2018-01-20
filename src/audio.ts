@@ -1,61 +1,174 @@
 import { Readable } from 'stream';
 
-const zeroBufferSamples = 8192;
-const zeroBuffer = Buffer.alloc(zeroBufferSamples * 2);
+const queueize = 8192;
+const zeroBuffer = Buffer.alloc(queueize);
 const sampleRate = 48000;
 
-type Source =
+export type Source =
 	| { kind: 'buffer', data: Buffer }
-	| { kind: 'stream', data: NodeJS.WritableStream }
+	| { kind: 'stream', data: NodeJS.ReadableStream }
+
+class Deferred<T> {
+	resolve : (result : T) => void;
+	promise : Promise<T>;
+
+	constructor() {
+		this.promise = new Promise((resolve, reject) => {
+			this.resolve = resolve;
+		});
+	}
+}
+
+type Queue =
+	| Source
+	| { kind: 'hold', data: Promise<Array<Source>> }
+	| { kind: 'time', data: Deferred<number> }
+	| { kind: 'stream_wait', data: NodeJS.ReadableStream }
+	| { kind: 'hold_wait' }
+
+export interface SyncPoint {
+	source: Source;
+	time: number;
+	stager: AudioStager;
+}
 
 export class AudioStager extends Readable {
-	private buffers : Array<Source>;
-	currentEnd : number;
+	private queue : Array<Queue>;
+	currentHead : number;
 	paused : boolean;
 	timer : NodeJS.Timer;
 
 	constructor() {
 		super();
 
-		this.buffers = [];
-		this.currentEnd = 0;
+		this.queue = [];
+		this.currentHead = 0;
 		this.paused = false;
 	}
 
-	appendSamples(data : Array<number>) : number {
-		let start = this.currentEnd;
-		this.currentEnd += data.length;
-		let buf = new Buffer(data.length * 2);
-		data.forEach((el, i) => {
-			buf.writeInt16LE(el, i*2);
+	currentTime() : Promise<number> {
+		if (this.queue.length === 0) {
+			return Promise.resolve(this.currentHead);
+		}
+
+		const last = this.queue.slice(-1)[0];
+		if (last.kind === 'time') return last.data.promise;
+
+		const deferred = new Deferred<number>();
+		this.queue.push({kind: 'time', data: deferred});
+
+		return deferred.promise;
+	}
+
+	hold(until : (time : number) => Promise<Array<Source>>) {
+		let start = this.currentTime();
+
+		this.queue.push({
+			kind: 'hold',
+			data: start.then(until),
 		});
-		this.buffers.push({kind: 'buffer', data: buf});
-		if (this.paused) this._doRead();
+	}
+
+	appendBuffer(data : Buffer) : Promise<number> {
+		let start = this.currentTime();
+
+		this.queue.push({kind: 'buffer', data: data});
+
 		return start;
 	}
 
-	_doRead = () => {
-		clearTimeout(this.timer);
+	appendSamples(data : Array<number>) : Promise<number> {
+		const buf = new Buffer(data.length * 2);
+		data.forEach((el, i) => {
+			buf.writeInt16LE(el, i*2);
+		});
 
-		this.paused = true;
-		let buf = this.buffers.shift();
-		while (buf !== undefined) {
+		return this.appendBuffer(buf);
+	}
+
+	private _pushBuffer(buf : Buffer) : boolean {
+		this.currentHead += buf.length;
+		this.paused = false;
+		return this.push(buf);
+	}
+
+	private _unpause() : void {
+		if (this.paused) {
 			this.paused = false;
-			if (buf.kind === 'buffer') {
-				if (!this.push(buf.data)) return;
-			}
-
-			buf = this.buffers.shift();
+			process.nextTick(() => this._read(1));
 		}
+	}
 
-		this.timer = setTimeout(() => {
-			this.currentEnd += zeroBufferSamples;
-			this.push(zeroBuffer);
-		}, zeroBufferSamples / sampleRate * 1000);
+	private _handleSource() : boolean {
+		const src = this.queue.shift();
+
+		if (src === undefined) return true;
+
+		switch (src.kind) {
+			case 'buffer':
+				return this._pushBuffer(src.data);
+
+			case 'stream':
+				const wait : Queue = { kind: 'stream_wait', data: src.data };
+				this.queue.unshift(wait);
+
+				src.data.on('data', (chunk) => {
+					if (!this._pushBuffer(chunk)) {
+						src.data.pause();
+					}
+				});
+				src.data.on('end', () => {
+					this.queue.shift();
+					this._unpause();
+				});
+				return this.queue.length === 0 || this.queue[0] !== wait;
+
+			case 'stream_wait':
+				this.queue.unshift(src);
+				src.data.resume();
+
+				return false;
+
+			case 'hold':
+				const hold_wait : Queue = { kind: 'hold_wait' };
+				this.queue.unshift(hold_wait);
+
+				src.data.then((sources) => {
+					this.queue.shift();
+					this.queue.unshift(...sources);
+					this._unpause();
+				});
+				return this.queue.length === 0 && this.queue[0] !== hold_wait;
+
+			case 'hold_wait':
+				this.queue.unshift(src);
+				return false;
+
+			case 'time':
+				src.data.resolve(this.currentHead);
+				return true;
+
+		}
 	}
 
 	_read(size : number) {
-		console.log('Read');
-		this._doRead();
+		this.paused = true;
+
+		while (this.queue.length > 0) {
+			clearTimeout(this.timer);
+
+			if (!this._handleSource()) return;
+		}
+
+		if (this.paused) {
+			this.timer = setTimeout(() => {
+				// There should be nothing in the queue AND we are paused
+				this._pushBuffer(zeroBuffer);
+			}, zeroBuffer.length / sampleRate / 2 * 1000);
+		}
 	}
+}
+
+export function sync(points : Array<SyncPoint>) {
+	
 }
