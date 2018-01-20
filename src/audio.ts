@@ -161,7 +161,14 @@ export class AudioStager extends Readable {
 				return true;
 
 			case 'silence':
-				return this._pushBuffer(Buffer.alloc(src.data));
+				for (let left = src.data; left > 0; left -= zeroBuffer.length) {
+					if (this._pushBuffer(zeroBuffer.slice(left))) {
+						left -= zeroBuffer.length;
+						if (left > 0) this.queue.unshift({ kind: 'silence', data: left });
+						return false;
+					}
+				}
+				return true;
 		}
 	}
 
