@@ -7,6 +7,7 @@ const sampleRate = 48000;
 export type Source =
 	| { kind: 'buffer', data: Buffer }
 	| { kind: 'stream', data: NodeJS.ReadableStream }
+	| { kind: 'silence', data: number }
 
 class Deferred<T> {
 	resolve : (result : T) => void;
@@ -30,6 +31,11 @@ export interface SyncPoint {
 	source: Source;
 	time: number;
 	stager: AudioStager;
+}
+
+export interface Hold {
+	time : Promise<number>;
+	cb : (sources : Array<Source>) => any;
 }
 
 export class AudioStager extends Readable {
@@ -60,13 +66,19 @@ export class AudioStager extends Readable {
 		return deferred.promise;
 	}
 
-	hold(until : (time : number) => Promise<Array<Source>>) {
+	hold() : Hold {
 		let start = this.currentTime();
+		let deferred = new Deferred<Array<Source>>();
 
 		this.queue.push({
 			kind: 'hold',
-			data: start.then(until),
+			data: deferred.promise,
 		});
+
+		return {
+			time: start,
+			cb : deferred.resolve,
+		};
 	}
 
 	appendBuffer(data : Buffer) : Promise<number> {
@@ -148,6 +160,8 @@ export class AudioStager extends Readable {
 				src.data.resolve(this.currentHead);
 				return true;
 
+			case 'silence':
+				return this._pushBuffer(Buffer.alloc(src.data));
 		}
 	}
 
@@ -170,5 +184,17 @@ export class AudioStager extends Readable {
 }
 
 export function sync(points : Array<SyncPoint>) {
-	
+	const holds = points.map(({ stager }) => stager.hold());
+	Promise.all(holds.map(({time}) => time))
+		.then((times) => {
+			const offsets = points.map(({ time }, index) => time - times[index]);
+			const minOffset = Math.min(...offsets);
+
+			points.forEach(({ stager, source }, index) => {
+				holds[index].cb([
+					{ kind: 'silence', data: offsets[index] - minOffset },
+					source,
+				]);
+			});
+		});
 }
