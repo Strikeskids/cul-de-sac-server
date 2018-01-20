@@ -32,6 +32,7 @@ export class AudioStager extends Readable {
 
 	_doRead = () => {
 		clearTimeout(this.timer);
+		
 		this.paused = true;
 		while (this.buffers.length > 0) {
 			const buf = this.buffers.shift();
