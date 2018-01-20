@@ -77,10 +77,12 @@ export class AudioStager extends Readable {
 	}
 
 	appendFloats(data : Array<number>) : Promise<number> {
+		return this.append({ kind: 'array', data });
+	}
+
+	append(source : Source) : Promise<number> {
 		const start = this.currentTime();
-		if (data.length === 0) return start;
-		const buf = AudioStager.convertFloats(data);
-		this.queue.push({ kind: 'buffer', data: buf });
+		this.queue.push(source);
 		return start;
 	}
 
@@ -156,12 +158,12 @@ export class AudioStager extends Readable {
 				if (samples <= 0) return true;
 
 				for (let left = samples * bytesPerSample; left > 0; left -= zeroBuffer.length) {
-					if (this._pushBuffer(zeroBuffer.slice(left))) {
+					if (!this._pushBuffer(zeroBuffer.slice(0, left))) {
 						left -= zeroBuffer.length;
 						if (left > 0) {
 							this.queue.unshift({
 								kind: 'silence',
-								duration: left * this.sampleRate * bytesPerSample,
+								duration: left / this.sampleRate / bytesPerSample,
 							});
 						}
 						return false;
