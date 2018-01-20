@@ -6,7 +6,6 @@
     "noImplicitAny": true,
     "strictNullChecks": true,
     "noImplicitThis": true,
-    "noUnusedLocals": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "moduleResolution": "node",
