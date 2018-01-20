@@ -2,7 +2,7 @@ import { Readable } from 'stream';
 
 const zeroBufferSamples = 8192;
 const zeroBuffer = Buffer.alloc(zeroBufferSamples * 2);
-const sampleRate = 44100;
+const sampleRate = 48000;
 
 export class AudioStager extends Readable {
 	buffers : Array<Buffer>;
@@ -23,7 +23,7 @@ export class AudioStager extends Readable {
 		this.currentEnd += data.length;
 		let buf = new Buffer(data.length * 2);
 		data.forEach((el, i) => {
-			buf.writeInt16BE(el, i*2);
+			buf.writeInt16LE(el, i*2);
 		});
 		this.buffers.push(buf);
 		if (this.paused) this._doRead();
@@ -32,7 +32,7 @@ export class AudioStager extends Readable {
 
 	_doRead = () => {
 		clearTimeout(this.timer);
-		
+
 		this.paused = true;
 		while (this.buffers.length > 0) {
 			const buf = this.buffers.shift();
