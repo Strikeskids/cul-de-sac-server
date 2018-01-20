@@ -4,10 +4,6 @@ declare module 'castv2-client' {
 		autoplay? : boolean;
 	}
 
-	export interface Error {
-		message: string;
-	}
-
 	export class Client {
 		connect(host : string, callback : () => void) : void;
 		launch(media : MediaReceiver, callback : (err : Error | null, player : any) => void) : void;
