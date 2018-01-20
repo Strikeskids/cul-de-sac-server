@@ -4,17 +4,10 @@ import * as shortid from 'shortid';
 import { AudioStager } from './audio';
 import { Deferred, generateSineWave } from './utils';
 
-const chirpFrequency = 20000;
-
 interface Session {
 	audio : AudioStager;
-	startTime : Promise<number>;
+	startTime? : Promise<number>;
 	result : Deferred<number>;
-}
-
-interface TimestampMessage {
-	id : string;
-	timestamp : number;
 }
 
 export class Synchronizer {
@@ -24,30 +17,39 @@ export class Synchronizer {
 
 	constructor (socket : SocketIO.Socket) {
 		this.socket.on('recv timestamp', this.receiveTimestamp);
+		this.socket.on('send timestamp', this.sendTimestamp);
 	}
 
-	private receiveTimestamp = (msg : TimestampMessage) => {
-		const session = this.sessions.get(msg.id);
+	private receiveTimestamp = (id : string, timestamp : number) => {
+		const session = this.sessions.get(id);
 		if (session !== undefined) {
+			if (session.startTime === undefined) {
+				console.error('Unexpected recv timestamp', id);
+				return;
+			}
 			session.startTime.then((time) => {
-				session.result.resolve(msg.timestamp - time);
+				session.result.resolve(timestamp - time);
+				this.sessions.delete(id);
 			});
 		}
 	}
 
-	synchronize (audio : AudioStager) {
-		const id = shortid();
+	private sendTimestamp = (id : string, freq : number) => {
+		const session = this.sessions.get(id);
+		if (session !== undefined) {
+			if (session.startTime !== undefined) {
+				console.error('Unexpected send timestamp', id);
+				return;
+			}
+			session.startTime = session.audio.appendFloats(
+				generateSineWave(session.audio.sampleRate, freq, 1)
+			);
+		}
+	}
 
-		this.socket.emit('send timestamp', { id, freq: chirpFrequency });
-
-		const startTime = audio.appendFloats(generateSineWave(audio.sampleRate, chirpFrequency, 1));
+	synchronize (id : string, audio : AudioStager) {
 		const result = new Deferred<number>();
-
-		this.sessions.set(id, {
-			audio,
-			startTime,
-			result,
-		});
+		this.sessions.set(id, { audio, result });
 
 		return result.promise;
 	}

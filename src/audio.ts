@@ -3,17 +3,17 @@ import { Deferred, seconds } from './utils';
 
 const zeroBuffer = Buffer.alloc(8192);
 const bytesPerSample = 2;
-const maxSample = (1 << 15);
+const maxSample = (1 << 15) - 1;
 
 export type Source =
 	| { kind: 'buffer', data: Buffer }
 	| { kind: 'array', data: Array<number> }
 	| { kind: 'stream', data: NodeJS.ReadableStream }
 	| { kind: 'silence', duration: seconds }
+	| { kind: 'hold', data: Promise<Array<Source>> }
 
 type Queue =
 	| Source
-	| { kind: 'hold', data: Promise<Array<Source>> }
 	| { kind: 'time', data: Deferred<number> }
 	| { kind: 'stream_wait', data: NodeJS.ReadableStream }
 	| { kind: 'hold_wait' }
@@ -70,13 +70,15 @@ export class AudioStager extends Readable {
 	static convertFloats(data : Array<number>) : Buffer {
 		const buf = new Buffer(data.length * bytesPerSample);
 		data.forEach((el, i) => {
-			buf.writeInt16LE(Math.max(Math.min(el, 1), -1) * maxSample, i*bytesPerSample);
+			const sample = Math.max(Math.min(el, 1), -1) * maxSample | 0;
+			buf.writeInt16LE(sample, i*bytesPerSample);
 		});
 		return buf;
 	}
 
 	appendFloats(data : Array<number>) : Promise<number> {
 		const start = this.currentTime();
+		if (data.length === 0) return start;
 		const buf = AudioStager.convertFloats(data);
 		this.queue.push({ kind: 'buffer', data: buf });
 		return start;
@@ -102,16 +104,12 @@ export class AudioStager extends Readable {
 
 		switch (src.kind) {
 			case 'buffer':
+				if (src.data.length === 0) return true;
 				return this._pushBuffer(src.data);
 
-			case 'array': {
-				const data = src.data;
-				const buf = new Buffer(data.length * bytesPerSample);
-				data.forEach((el, i) => {
-					buf.writeInt16LE(el, i*bytesPerSample);
-				});
-				return this._pushBuffer(buf);
-			}
+			case 'array':
+				if (src.data.length === 0) return true;
+				return this._pushBuffer(AudioStager.convertFloats(src.data));
 
 			case 'stream':
 				const wait : Queue = { kind: 'stream_wait', data: src.data };
@@ -155,6 +153,7 @@ export class AudioStager extends Readable {
 
 			case 'silence':
 				const samples = (src.duration * this.sampleRate) | 0;
+				if (samples <= 0) return true;
 
 				for (let left = samples * bytesPerSample; left > 0; left -= zeroBuffer.length) {
 					if (this._pushBuffer(zeroBuffer.slice(left))) {
@@ -178,7 +177,9 @@ export class AudioStager extends Readable {
 		while (this.queue.length > 0) {
 			clearTimeout(this.timer);
 
-			if (!this._handleSource()) return;
+			if (!this._handleSource()) {
+				return;
+			}
 		}
 
 		if (this.paused) {
@@ -219,5 +220,5 @@ export function sync_separate(sources : Source[], offsets : seconds[], stagers :
 			offset: offsets[i],
 			stager: stagers[i],
 		};
-	});
+	}));
 }

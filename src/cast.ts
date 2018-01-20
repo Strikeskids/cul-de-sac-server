@@ -41,10 +41,12 @@ function getIp() : string {
 export class CastEntity {
 	name : string;
 	ip : string;
+	id : string;
 
 	constructor (service : mdns.Service) {
 		this.name = service.txtRecord.fn;
 		this.ip = parseIP(service.addresses[0]);
+		this.id = service.txtRecord.id;
 	}
 }
 
@@ -66,9 +68,9 @@ export class CastBrowser {
 
 export class Cast {
 	private encoder : Encoder;
+	private started : boolean;
 
 	audio : AudioStager;
-	output : NodeJS.ReadableStream;
 
 	castEntity : CastEntity;
 
@@ -83,18 +85,26 @@ export class Cast {
 		this.port = port;
 		this.url = url;
 
-		this.output = this.encoder = new Encoder({
+		this.encoder = new Encoder({
 			channels: 1,
 			bitDepth: 16,
-			sampleRate: 44100,
+			sampleRate: audio.sampleRate,
 
 			bitRate: 128,
-			outSampleRate: 44100,
+			outSampleRate: audio.sampleRate,
 			mode: MONO,
 		});
 
-		this.audio.pipe(this.encoder, {end: false});
 		this.ip = getIp();
+	}
+
+	output() : NodeJS.ReadableStream {
+		if (!this.started) {
+			this.started = true;
+			this.audio.pipe(this.encoder, {end: false});
+		}
+
+		return this.encoder;
 	}
 
 	launchMedia () {
@@ -131,12 +141,12 @@ export class Cast {
 }
 
 export class CastApplication {
-	private casts : Map<string, Cast>;
+	casts : Map<string, Cast>;
 
 	app : express.Application;
 
 	port : number;
-	url = 'beamfhoming.mp3';
+	url = 'data.mp3';
 
 	constructor (port : number) {
 		this.port = port;
@@ -152,11 +162,11 @@ export class CastApplication {
 
 			if (cast !== undefined) {
 				res.set({
-					'Content-Type': 'audio/mpeg',
+					'Content-Type': 'audio/mpeg3',
 					'Transfer-Encoding': 'chunked',
 				});
 
-				cast.output.pipe(res);
+				cast.output().pipe(res);
 			} else {
 				console.log(incomingIP);
 				res.sendStatus(404);

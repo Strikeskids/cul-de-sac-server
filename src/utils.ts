@@ -8,7 +8,7 @@ export function parseIP (ip : string) : string {
 }
 
 export function generateSineWave (sampleRate : number, freq : number, duration : seconds) : Array<number> {
-	const samples = duration / sampleRate |0;
+	const samples = (duration * sampleRate) |0;
 	const cycleWidth = sampleRate / freq;
 
 	const result = new Array(samples);
