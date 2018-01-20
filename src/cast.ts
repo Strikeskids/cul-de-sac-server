@@ -2,7 +2,7 @@ import { AudioStager } from './audio';
 import { Encoder, MONO } from 'lame';
 import { Server } from 'http';
 
-import * as utils from './utils';
+import { parseIP } from './utils';
 
 import * as os from 'os';
 
@@ -44,14 +44,12 @@ export class CastEntity {
 
 	constructor (service : mdns.Service) {
 		this.name = service.txtRecord.fn;
-		this.ip = utils.parseIP(service.addresses[0]);
+		this.ip = parseIP(service.addresses[0]);
 	}
 }
 
 export class CastBrowser {
-
 	castBrowser : mdns.Browser;
-
 	allCasts : CastEntity[];
 
 	constructor (cb : (entity : CastEntity) => void) {
@@ -61,7 +59,6 @@ export class CastBrowser {
 				let entity : CastEntity = new CastEntity(service)
 				cb(entity);
 			}
-			//this.castBrowser.stop();
 		});
 		this.castBrowser.start();
 	}
