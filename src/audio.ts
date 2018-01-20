@@ -83,6 +83,7 @@ export class AudioStager extends Readable {
 	append(source : Source) : Promise<number> {
 		const start = this.currentTime();
 		this.queue.push(source);
+		this._unpause();
 		return start;
 	}
 
@@ -187,7 +188,11 @@ export class AudioStager extends Readable {
 		if (this.paused) {
 			this.timer = setTimeout(() => {
 				// There should be nothing in the queue AND we are paused
-				this._pushBuffer(zeroBuffer);
+				if (this.queue.length === 0) {
+					this._pushBuffer(zeroBuffer);
+				} else {
+					this._unpause();
+				}
 			}, zeroBuffer.length / this.sampleRate / bytesPerSample * 1000);
 		}
 	}

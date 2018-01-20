@@ -128,7 +128,6 @@ export class Cast {
 				};
 
 				player.load(media, { autoplay: true }, (err : any, status : string) => {
-					console.log('Load', err, status);
 				});
 			});
 		});

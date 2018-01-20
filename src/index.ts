@@ -7,7 +7,7 @@ import { Cast, CastBrowser, CastApplication } from './cast';
 import { generateSineWave } from './utils';
 import { Synchronizer } from './synchronize';
 
-const sampleRate = 48000;
+const sampleRate = 44100;
 const port = 5555;
 
 const chirp : Source = {
@@ -31,7 +31,7 @@ function chirpStream(idx : number, total : number) : Source {
 		},
 		{
 			kind: 'array',
-			data: generateSineWave(sampleRate, 500, 0.5),
+			data: generateSineWave(sampleRate, 500, 0.5).map((a) => a / 10),
 		},
 		{
 			kind: 'silence',
@@ -49,10 +49,13 @@ function chirpStream(idx : number, total : number) : Source {
 }
 
 io.on('connection', (socket) => {
+	console.log('Got connection');
 	const syncer = new Synchronizer(socket);
 	const casts = [...caster.casts.values()];
 	Promise.all(
 		casts.map((cast) => syncer.synchronize(cast.castEntity.id, cast.audio))
+	).then((offsets) =>
+		Promise.all(casts.map((cast) => syncer.synchronize(cast.castEntity.id, cast.audio)))
 	).then((offsets) => {
 		sync(casts.map((cast, i) => {
 			return { 
@@ -64,4 +67,6 @@ io.on('connection', (socket) => {
 	});
 });
 
-http.listen(port);
+http.listen(port, () => {
+	console.log('Started server on', port);
+});
