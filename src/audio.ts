@@ -1,24 +1,15 @@
 import { Readable } from 'stream';
+import { Deferred, seconds } from './utils';
 
-const queueize = 8192;
-const zeroBuffer = Buffer.alloc(queueize);
-const sampleRate = 48000;
+const zeroBuffer = Buffer.alloc(8192);
+const bytesPerSample = 2;
+const maxSample = (1 << 15);
 
 export type Source =
 	| { kind: 'buffer', data: Buffer }
+	| { kind: 'array', data: Array<number> }
 	| { kind: 'stream', data: NodeJS.ReadableStream }
-	| { kind: 'silence', data: number }
-
-class Deferred<T> {
-	resolve : (result : T) => void;
-	promise : Promise<T>;
-
-	constructor() {
-		this.promise = new Promise((resolve, reject) => {
-			this.resolve = resolve;
-		});
-	}
-}
+	| { kind: 'silence', duration: seconds }
 
 type Queue =
 	| Source
@@ -27,34 +18,29 @@ type Queue =
 	| { kind: 'stream_wait', data: NodeJS.ReadableStream }
 	| { kind: 'hold_wait' }
 
-export interface SyncPoint {
-	source: Source;
-	time: number;
-	stager: AudioStager;
-}
-
 export interface Hold {
 	time : Promise<number>;
 	cb : (sources : Array<Source>) => any;
 }
 
 export class AudioStager extends Readable {
-	private queue : Array<Queue>;
-	currentHead : number;
-	paused : boolean;
-	timer : NodeJS.Timer;
+	private queue : Array<Queue> = [];
 
-	constructor() {
+	private headTime : number = 0;
+	private paused : boolean = false;
+	private timer : NodeJS.Timer;
+
+	sampleRate : number;
+
+	constructor(sampleRate : number) {
 		super();
 
-		this.queue = [];
-		this.currentHead = 0;
-		this.paused = false;
+		this.sampleRate = sampleRate;
 	}
 
 	currentTime() : Promise<number> {
 		if (this.queue.length === 0) {
-			return Promise.resolve(this.currentHead);
+			return Promise.resolve(this.headTime);
 		}
 
 		const last = this.queue.slice(-1)[0];
@@ -81,25 +67,23 @@ export class AudioStager extends Readable {
 		};
 	}
 
-	appendBuffer(data : Buffer) : Promise<number> {
-		let start = this.currentTime();
+	static convertFloats(data : Array<number>) : Buffer {
+		const buf = new Buffer(data.length * bytesPerSample);
+		data.forEach((el, i) => {
+			buf.writeInt16LE(Math.max(Math.min(el, 1), -1) * maxSample, i*bytesPerSample);
+		});
+		return buf;
+	}
 
-		this.queue.push({kind: 'buffer', data: data});
-
+	appendFloats(data : Array<number>) : Promise<number> {
+		const start = this.currentTime();
+		const buf = AudioStager.convertFloats(data);
+		this.queue.push({ kind: 'buffer', data: buf });
 		return start;
 	}
 
-	appendSamples(data : Array<number>) : Promise<number> {
-		const buf = new Buffer(data.length * 2);
-		data.forEach((el, i) => {
-			buf.writeInt16LE(el, i*2);
-		});
-
-		return this.appendBuffer(buf);
-	}
-
 	private _pushBuffer(buf : Buffer) : boolean {
-		this.currentHead += buf.length;
+		this.headTime += buf.length / this.sampleRate / bytesPerSample;
 		this.paused = false;
 		return this.push(buf);
 	}
@@ -119,6 +103,15 @@ export class AudioStager extends Readable {
 		switch (src.kind) {
 			case 'buffer':
 				return this._pushBuffer(src.data);
+
+			case 'array': {
+				const data = src.data;
+				const buf = new Buffer(data.length * bytesPerSample);
+				data.forEach((el, i) => {
+					buf.writeInt16LE(el, i*bytesPerSample);
+				});
+				return this._pushBuffer(buf);
+			}
 
 			case 'stream':
 				const wait : Queue = { kind: 'stream_wait', data: src.data };
@@ -157,14 +150,21 @@ export class AudioStager extends Readable {
 				return false;
 
 			case 'time':
-				src.data.resolve(this.currentHead);
+				src.data.resolve(this.headTime);
 				return true;
 
 			case 'silence':
-				for (let left = src.data; left > 0; left -= zeroBuffer.length) {
+				const samples = (src.duration * this.sampleRate) | 0;
+
+				for (let left = samples * bytesPerSample; left > 0; left -= zeroBuffer.length) {
 					if (this._pushBuffer(zeroBuffer.slice(left))) {
 						left -= zeroBuffer.length;
-						if (left > 0) this.queue.unshift({ kind: 'silence', data: left });
+						if (left > 0) {
+							this.queue.unshift({
+								kind: 'silence',
+								duration: left * this.sampleRate * bytesPerSample,
+							});
+						}
 						return false;
 					}
 				}
@@ -185,23 +185,39 @@ export class AudioStager extends Readable {
 			this.timer = setTimeout(() => {
 				// There should be nothing in the queue AND we are paused
 				this._pushBuffer(zeroBuffer);
-			}, zeroBuffer.length / sampleRate / 2 * 1000);
+			}, zeroBuffer.length / this.sampleRate / bytesPerSample * 1000);
 		}
 	}
 }
 
-export function sync(points : Array<SyncPoint>) {
+export interface SyncPoint {
+	source: Source;
+	offset: seconds;
+	stager: AudioStager;
+}
+
+export function sync(points : Array<SyncPoint>) : Promise<void> {
 	const holds = points.map(({ stager }) => stager.hold());
-	Promise.all(holds.map(({time}) => time))
+	return Promise.all(holds.map(({time}) => time))
 		.then((times) => {
-			const offsets = points.map(({ time }, index) => time - times[index]);
+			const offsets = points.map(({ offset }, index) => offset - times[index]);
 			const minOffset = Math.min(...offsets);
 
 			points.forEach(({ stager, source }, index) => {
 				holds[index].cb([
-					{ kind: 'silence', data: offsets[index] - minOffset },
+					{ kind: 'silence', duration: offsets[index] - minOffset },
 					source,
 				]);
 			});
 		});
+}
+
+export function sync_separate(sources : Source[], offsets : seconds[], stagers : AudioStager[]) {
+	return sync(sources.map((source, i) => {
+		return {
+			source,
+			offset: offsets[i],
+			stager: stagers[i],
+		};
+	});
 }
