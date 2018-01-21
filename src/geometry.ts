@@ -50,7 +50,7 @@ export function getAmplitudes(x0: number, y0: number): [number, number, number] 
 	} else { // Case C - right pair
 		const diff = theta1 + Math.PI * 2 - theta3;
 		const a1 = 0;
-		const a2 = posmod(theta - diff, Math.PI * 2);
+		const a2 = posmod((theta - theta3) / diff, Math.PI * 2);
 		const a3 = 1 - a2;
 		return [a1, a2, a3];
 	}
