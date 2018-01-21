@@ -192,7 +192,7 @@ export class AudioStager extends Readable {
 
 		if (this.paused) {
 			const sleepDuration = 
-				(silenceLength + (this.headTime * 1000 - (Date.now() - this.start)) / 2 + 0) | 0;
+				(silenceLength + (this.headTime * 1000 - (Date.now() - this.start)) + 0) | 0;
 
 			clearTimeout(this.timer);
 			this.timer = setTimeout(() => {

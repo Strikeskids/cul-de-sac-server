@@ -23,6 +23,8 @@ let io = SocketIO(http);
 
 let seen = false;
 
+let idx = 0;
+
 new CastBrowser(x => {
 	caster.addStream(new AudioStager(sampleRate), x).launchMedia();
 });
@@ -48,49 +50,32 @@ function chirpStream(idx : number, total : number) : Source {
 	return result;
 }
 
-new Promise((resolve) => setTimeout(resolve, 20000))
-.then(() => 
-	Promise.all([...caster.casts.values()].map((cast) => cast.audio.currentTime())),
-).then((offsets) =>
-	Promise.all([
-		offsets, 
-		fs.readFile('song.wav').then((wavdata) => WavDecoder.decode(wavdata)),
-	])
-).then(([offsets, song]) => {
-	setInterval(() => {
+fs.readFile('song.wav').then((wavdata) => 
+	WavDecoder.decode(wavdata)
+).then((song) => {
+	let data = AudioStager.convertFloats([...song.channelData[0]]);
+	new Promise((resolve) => setTimeout(resolve, 10000))
+	.then(() => 
+		Promise.all([...caster.casts.values()].map((cast) => cast.audio.currentTime())),
+	).then((offsets) => {
+		// setInterval(() => {
+		// 	sync([...caster.casts.values()].map((cast, i) => {
+		// 		return { 
+		// 			stager: cast.audio,
+		// 			offset: offsets[i],
+		// 			source: chirp,
+		// 		}
+		// 	}));
+		// }, 2000);
 		sync([...caster.casts.values()].map((cast, i) => {
 			return { 
 				stager: cast.audio,
 				offset: offsets[i],
-				source: chirp,
-			}
-		}));
-	}, 2000);
-	// sync([...caster.casts.values()].map((cast, i) => {
-	// 	return { 
-	// 		stager: cast.audio,
-	// 		offset: offsets[i],
-	// 		source: {
-	// 			kind: 'array',
-	// 			data: [...song.channelData[0]],
-	// 		} as Source,
-	// 	};
-	// }));
-});
-
-io.on('connection', (socket) => {
-	console.log('Got connection');
-	const syncer = new Synchronizer(socket);
-	const casts = [...caster.casts.values()];
-	Promise.all(
-		casts.map((cast) => syncer.synchronize(cast.castEntity.id, cast.audio))
-	).then((offsets) => {
-		sync(casts.map((cast, i) => {
-			return { 
-				stager: cast.audio,
-				offset: offsets[i],
-				source: chirpStream(i, casts.length),
-			}
+				source: {
+					kind: 'buffer',
+					data: data,
+				} as Source,
+			};
 		}));
 	});
 });
