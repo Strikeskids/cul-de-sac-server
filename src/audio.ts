@@ -42,6 +42,15 @@ export class AudioStager extends Readable {
 		this.sampleRate = sampleRate;
 	}
 
+	reset() {
+		this.queue = [];
+		if (this.paused)
+			this.push(zeroBuffer.slice(0, 2));
+		this.paused = false;
+		clearTimeout(this.timer);
+		this.start = 0;
+	}
+
 	currentTime() : Promise<number> {
 		if (this.queue.length === 0) {
 			return Promise.resolve(this.headTime);
@@ -95,7 +104,6 @@ export class AudioStager extends Readable {
 		if (buf.length === 0) {
 			return true;
 		}
-		process.stdout.write((this.headTime - (Date.now() - this.start) / 1000) + '\r');
 		this.headTime += buf.length / this.sampleRate / bytesPerSample;
 		this.paused = false;
 		return this.push(buf);
@@ -192,7 +200,7 @@ export class AudioStager extends Readable {
 
 		if (this.paused) {
 			const sleepDuration = 
-				(silenceLength + (this.headTime * 1000 - (Date.now() - this.start)) / 2 + 0) | 0;
+				(silenceLength + (this.headTime * 1000 - (Date.now() - this.start)) + 0) | 0;
 
 			clearTimeout(this.timer);
 			this.timer = setTimeout(() => {

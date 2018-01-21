@@ -1,64 +1,95 @@
 import * as express from 'express';
 import * as shortid from 'shortid';
 
-import { AudioStager } from './audio';
+import { CastApplication } from './cast';
+import { Source, sync } from './audio';
 import { Deferred, generateSineWave } from './utils';
-
-interface Session {
-	audio : AudioStager;
-	startTime? : Promise<number>;
-	result : Deferred<number>;
-}
 
 export class Synchronizer {
 	private socket : SocketIO.Socket;
-	private sessions : Map<string, Session>;
+	private caster : CastApplication;
 
-	constructor (socket : SocketIO.Socket) {
+	private synchronizing : boolean;
+	private chirpTimer : NodeJS.Timer;
+
+	constructor (socket : SocketIO.Socket, caster : CastApplication) {
 		this.socket = socket;
-		this.sessions = new Map();
+		this.caster = caster;
 
-		this.socket.on('timestamp', this.receiveTimestamp);
-		this.socket.on('requestSync', this.sendTimestamp);
+		this.socket.on('reset', this._reset);
+		this.socket.on('autosync', this._autosync);
+		this.socket.on('delay', this._delayCast)
+		this.socket.on('chirp', this._chirp);
+		this.socket.on('info', this._castInfo);
 	}
 
-	private receiveTimestamp = (id : string, timestamp : number) => {
-		console.log('Recieved timestamp', id, timestamp);
-		const session = this.sessions.get(id);
-		if (session !== undefined) {
-			if (session.startTime === undefined) {
-				console.error('Unexpected recv timestamp', id);
-				return;
-			}
-			session.startTime.then((time) => {
-				console.log('Synced', id, timestamp - time)
-				session.result.resolve(timestamp - time);
-				this.sessions.delete(id);
+	private casts() {
+		return [...this.caster.casts.values()];
+	}
+
+	private _getCast(idx : number) {
+		return this.casts()[idx];
+	}
+
+	private _castInfo = (idx : number) => {
+		const cast = this._getCast(idx);
+		this.socket.emit('info', {
+			id: cast.castEntity.id,
+			idx,
+			offset: cast.timeOffset,
+		});
+	}
+
+	private _chirp = (start : boolean) => {
+		clearInterval(this.chirpTimer);
+		if (!start) return;
+
+		this.chirpTimer = setInterval(() => {
+			let casts = this.casts();
+
+			sync(casts.map((cast, idx) => {
+				return {
+					stager: cast.audio,
+					offset: cast.timeOffset,
+					source: {
+						kind: 'array',
+						data: generateSineWave(cast.audio.sampleRate, idx * 100 + 400, 0.05),
+					} as Source,
+				};
+			}));
+		}, 2000);
+	}
+
+	private _delayCast = (idx : number, duration : number) => {
+		const cast = this._getCast(idx);
+		cast.timeOffset += duration;
+	}
+
+	private _reset = () => {
+		this.caster.casts.forEach(cast => cast.reset());
+	}
+
+	private _autosync = (duration : number) => {
+		if (this.synchronizing) {
+			this.socket.emit('error', {message: 'Already synchronizing'})
+
+			return;
+		}
+
+		let casts = this.casts();
+
+		this.synchronizing = true;
+
+		Promise.all(casts.map(cast => cast.audio.currentTime()))
+		.then(() => 
+			new Promise((resolve) => setTimeout(resolve, msg.duration))
+		).then(() => 
+			Promise.all(casts.map(cast => cast.audio.currentTime())),
+		).then(offsets => {
+			casts.forEach((cast, i) => {
+				cast.timeOffset = offsets[i];
 			});
-		} else {
-			console.error('Session not found', id);
-		}
-	}
-
-	private sendTimestamp = (id : string, freq : number) => {
-		console.log('Send timestamp', id, freq);
-		const session = this.sessions.get(id);
-		if (session !== undefined) {
-			const sine1 = generateSineWave(session.audio.sampleRate, freq, 0.2);
-			const sine2 = generateSineWave(session.audio.sampleRate, 400, 0.2);
-			session.startTime = session.audio.appendFloats(
-				sine1.map((a, i) => sine1[i] / 2 + sine2[i] / 20)
-			);
-		} else {
-			console.error('Session not found', id);
-		}
-	}
-
-	synchronize (id : string, audio : AudioStager) {
-		console.log('Setup for synchronize', id);
-		const result = new Deferred<number>();
-		this.sessions.set(id, { audio, result });
-
-		return result.promise;
+			this.synchronizing = false;
+		});
 	}
 }
