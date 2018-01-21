@@ -36,20 +36,22 @@ export function getAmplitudes(x0: number, y0: number): [number, number, number] 
 	const theta = posmod(Math.atan2(y0, x0), 2 * Math.PI);
 
 	if (theta1 <= theta && theta < theta2) { // Case A - front pair
-		const dRatio = Math.pow(d1 / d0, 3);
-		const a1 = 0.5 * dRatio * ((y0 / y1) - (x0 / x));
-		const a2 = 0.5 * dRatio * ((y0 / y1) - (x0 / x));
+		const diff = theta2 - theta1;
+		const a1 = (theta - theta1) / diff;
+		const a2 = 1 - a1;
 		const a3 = 0;
 		return [a1, a2, a3];
 	} else if (theta2 <= theta && theta < theta3) { // Case B - left pair
-		const a1 = Math.pow(d1 / d0, 3) * (-(x0 / x));
+		const diff = theta3 - theta2;
+		const a3 = (theta - theta2) / diff;
 		const a2 = 0;
-		const a3 = y2 * y2 * (((a1 * y1) / Math.pow(d1, 3)) - (y0 / Math.pow(d0, 3)));
+		const a1 = 1 - a3;
 		return [a1, a2, a3];
 	} else { // Case C - right pair
+		const diff = theta1 + Math.PI * 2 - theta3;
 		const a1 = 0;
-		const a2 = Math.pow(d1 / d0, 3) * (x0 / x);
-		const a3 = y2 * y2 * (((a2 * y1) / Math.pow(d1, 3)) - (y0 / Math.pow(d0, 3)));
+		const a2 = posmod(theta - diff, Math.PI * 2);
+		const a3 = 1 - a2;
 		return [a1, a2, a3];
 	}
 }
