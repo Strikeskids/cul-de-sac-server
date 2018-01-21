@@ -219,7 +219,7 @@ export interface SyncPoint {
 	stager: AudioStager;
 }
 
-export function sync(points : Array<SyncPoint>) : Promise<void> {
+export function sync(points : Array<SyncPoint>) : Promise<number> {
 	const holds = points.map(({ stager }) => stager.hold());
 	return Promise.all(holds.map(({time}) => time))
 		.then((times) => {
@@ -232,6 +232,8 @@ export function sync(points : Array<SyncPoint>) : Promise<void> {
 					source,
 				]);
 			});
+
+			return Date.now() / 1000;
 		});
 }
 

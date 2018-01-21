@@ -108,6 +108,7 @@ export class Cast {
 		
 		const sessionId = this.sessionId;
 		this.sessionId = undefined;
+		this.timeOffset = 0;
 
 		if (sessionId !== undefined) {
 			new Promise((resolve, reject) => {
@@ -146,12 +147,13 @@ export class Cast {
 
 	launchMedia () {
 		this.connect().then((client) => 
-			new Promise((resolve, reject) => 
+			new Promise((resolve, reject) => {
+				console.log('Connected to', this.castEntity.ip);
 				client.launch(DefaultMediaReceiver, (err : Error | null, player : any) => {
 					if (err !== null) reject(err);
 					else resolve(player);
-				})
-			)
+				});
+			})
 		).then((player : any) => {
 			this.sessionId = player.session.sessionId;
 			const media = {

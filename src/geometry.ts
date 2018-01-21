@@ -25,6 +25,12 @@ function posmod(val: number, mod: number): number {
 	return ((val % mod) + mod) % mod;
 }
 
+export const order = [
+	'98790a8ee42ab38e307b119c1c229231',
+	'658b7cbc2f2ccba278ddc91f12f50102',
+	'1a7465ef1a47f71c16e00777ddbd9763',
+];
+
 /**
  * Returns the amplitudes for each speaker for a noise of unit amplitude at
  * the given coordinates.

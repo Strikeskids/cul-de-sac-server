@@ -86,14 +86,16 @@ export function startChirping(casts : Array<Cast>, interval = 2000) : NodeJS.Tim
 }
 
 export function autosync(casts : Array<Cast>, duration : number) : Promise<void> {
+	console.log('Synchronizing homes');
 	return Promise.all(casts.map(cast => cast.audio.currentTime()))
 	.then(() => 
 		new Promise((resolve) => setTimeout(resolve, duration))
 	).then(() => 
 		Promise.all(casts.map(cast => cast.audio.currentTime())),
-	).then(offsets => 
+	).then(offsets => {
+		console.log('Synchronized');
 		casts.forEach((cast, i) => {
 			cast.timeOffset = offsets[i];
 		})
-	);
+	});
 }
