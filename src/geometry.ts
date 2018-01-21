@@ -1,5 +1,7 @@
 "use strict";
 
+import * as assert from "assert";
+
 // Constants for the positions of the speakers
 // Speaker 1 (Chirp) should be x units to the left and y1 units in front of the user
 // Speaker 2 (Squawk) should be x units to the right and y1 units in front of the user
@@ -34,22 +36,39 @@ function posmod(val: number, mod: number): number {
 export function getAmplitudes(x0: number, y0: number): [number, number, number] {
 	const d0 = dist(x0, y0);
 	const theta = posmod(Math.atan2(y0, x0), 2 * Math.PI);
+	let result: [number, number, number];
 
 	if (theta1 <= theta && theta < theta2) { // Case A - front pair
-		const dRatio = Math.pow(d1 / d0, 3);
-		const a1 = 0.5 * dRatio * ((y0 / y1) - (x0 / x));
-		const a2 = 0.5 * dRatio * ((y0 / y1) - (x0 / x));
+		const diff = theta2 - theta1;
+		const a1 = (theta - theta1) / diff;
+		const a2 = 1 - a1;
 		const a3 = 0;
-		return [a1, a2, a3];
+		assert(0 <= a1 && a1 <= 1);
+		assert(0 <= a2 && a2 <= 1);
+		assert(0 <= a3 && a3 <= 1);
+		result = [a1, a2, a3];
 	} else if (theta2 <= theta && theta < theta3) { // Case B - left pair
-		const a1 = Math.pow(d1 / d0, 3) * (-(x0 / x));
+		const diff = theta3 - theta2;
+		const a3 = (theta - theta2) / diff;
 		const a2 = 0;
-		const a3 = y2 * y2 * (((a1 * y1) / Math.pow(d1, 3)) - (y0 / Math.pow(d0, 3)));
-		return [a1, a2, a3];
+		const a1 = 1 - a3;
+		assert(0 <= a1 && a1 <= 1);
+		assert(0 <= a2 && a2 <= 1);
+		assert(0 <= a3 && a3 <= 1);
+		result = [a1, a2, a3];
 	} else { // Case C - right pair
+		const diff = theta1 + Math.PI * 2 - theta3; // 2.245537
 		const a1 = 0;
-		const a2 = Math.pow(d1 / d0, 3) * (x0 / x);
-		const a3 = y2 * y2 * (((a2 * y1) / Math.pow(d1, 3)) - (y0 / Math.pow(d0, 3)));
-		return [a1, a2, a3];
+		const a2 = posmod(theta - theta3, Math.PI * 2) / diff;
+		const a3 = 1 - a2;
+		assert(0 <= a1 && a1 <= 1);
+		assert(0 <= a2 && a2 <= 1);
+		assert(0 <= a3 && a3 <= 1);
+		result = [a1, a2, a3];
 	}
+
+	let [a1, a2, a3] = result;
+	let tot = (a1 / Math.pow(d1, 2)) + (a2 / Math.pow(d1, 2)) + (a3 / Math.pow(y2, 2));
+	tot *= d0;
+	return [a1/tot, a2/tot, a3/tot];
 }
