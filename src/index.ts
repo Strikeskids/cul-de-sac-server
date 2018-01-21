@@ -71,32 +71,46 @@ let order = [
 // 	}, 5000);
 // });
 
-// fs.readFile('song.wav').then((wavdata) => 
-// 	WavDecoder.decode(wavdata)
-// ).then((song) => {
-// 	let data = AudioStager.convertFloats([...song.channelData[0]]);
-// 	new Promise((resolve) => setTimeout(resolve, 10000))
-// 	.then(() => 
-// 		Promise.all([...caster.casts.values()].map((cast) => cast.audio.currentTime())),
-// 	).then((offsets) => {
-// 		setInterval(() => {
-// 			sync([...caster.casts.values()].map((cast, i) => {
-// 				return { 
-// 					stager: cast.audio,
-// 					offset: cast.timeOffset,
-// 					source: chirp,
-// 				}
-// 			}));
-// 		}, 2000);
-// 		// sync([...caster.casts.values()].map((cast, i) => {
-// 		// 	return { 
-// 		// 		stager: cast.audio,
-// 		// 		offset: offsets[i],
-// 		// 		source: {
-// 		// 			kind: 'buffer',
-// 		// 			data: data,
-// 		// 		} as Source,
-// 		// 	};
-// 		// }));
-// 	});
-// });
+fs.readFile('song.wav').then((wavdata) => 
+	WavDecoder.decode(wavdata)
+).then((song) => {
+	let triples = [...song.channelData[0]].map((sample, idx) => {
+		const th = idx * Math.PI * 2 / sampleRate / 10;
+		const x = Math.cos(th) * 2;
+		const y = Math.sin(th) * 2;
+
+		return getAmplitudes(x, y).map(a => a * sample);
+	});
+
+	let data = order.map((_, idx) => {
+		return AudioStager.convertFloats(triples.map(x => x[idx]));
+	});
+
+	let casts = order.map((id) => {
+		let cast = caster.casts.get(id);
+		if (cast === undefined) throw 'Hello';
+		return cast;
+	});
+
+	autosync(casts, 10000).then(() => {
+		// setInterval(() => {
+		// 	sync([...caster.casts.values()].map((cast, i) => {
+		// 		return { 
+		// 			stager: cast.audio,
+		// 			offset: cast.timeOffset,
+		// 			source: chirp,
+		// 		}
+		// 	}));
+		// }, 2000);
+		sync(casts.map((cast, i) => {
+			return { 
+				stager: cast.audio,
+				offset: cast.timeOffset,
+				source: {
+					kind: 'buffer',
+					data: data[i],
+				} as Source,
+			};
+		}));
+	});
+});
