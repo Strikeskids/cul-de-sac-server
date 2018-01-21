@@ -91,7 +91,9 @@ export class AudioStager extends Readable {
 	}
 
 	private _pushBuffer(buf : Buffer) : boolean {
-		process.stdout.write('' + (this.headTime - (Date.now() - this.start) / 1000) + '\r');
+		if (buf.length === 0) {
+			return true;
+		}
 		this.headTime += buf.length / this.sampleRate / bytesPerSample;
 		this.paused = false;
 		return this.push(buf);
@@ -114,11 +116,9 @@ export class AudioStager extends Readable {
 
 		switch (src.kind) {
 			case 'buffer':
-				if (src.data.length === 0) return true;
 				return this._pushBuffer(src.data);
 
 			case 'array':
-				if (src.data.length === 0) return true;
 				return this._pushBuffer(AudioStager.convertFloats(src.data));
 
 			case 'stream':
@@ -191,16 +191,16 @@ export class AudioStager extends Readable {
 		}
 
 		if (this.paused) {
+			const sleepDuration = 
+				(zeroBuffer.length / this.sampleRate / bytesPerSample * 1000 
+					+ (this.headTime * 1000 - (Date.now() - this.start)) / 2) | 0;
+
+			clearTimeout(this.timer);
 			this.timer = setTimeout(() => {
-					// There should be nothing in the queue AND we are paused
-					if (this.queue.length === 0) {
-						this._pushBuffer(zeroBuffer);
-					} else {
-						console.log('Skip', this.queue.length);
-					}
+					this.append({ kind: 'buffer', data: zeroBuffer });
+					this._read(1);
 				},
-				zeroBuffer.length / this.sampleRate / bytesPerSample * 1000 
-					+ (this.headTime * 1000 - (Date.now() - this.start)) / 2
+				sleepDuration,
 			);
 		}
 	}
@@ -218,6 +218,7 @@ export function sync(points : Array<SyncPoint>) : Promise<void> {
 		.then((times) => {
 			const offsets = points.map(({ offset }, index) => offset - times[index]);
 			const minOffset = Math.min(...offsets);
+			console.log(minOffset, offsets);
 
 			points.forEach(({ stager, source }, index) => {
 				holds[index].cb([

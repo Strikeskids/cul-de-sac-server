@@ -54,8 +54,8 @@ io.on('connection', (socket) => {
 	const casts = [...caster.casts.values()];
 	Promise.all(
 		casts.map((cast) => syncer.synchronize(cast.castEntity.id, cast.audio))
-	).then((offsets) =>
-		Promise.all(casts.map((cast) => syncer.synchronize(cast.castEntity.id, cast.audio)))
+	// ).then((offsets) =>
+	// 	Promise.all(casts.map((cast) => syncer.synchronize(cast.castEntity.id, cast.audio)))
 	).then((offsets) => {
 		sync(casts.map((cast, i) => {
 			return { 
