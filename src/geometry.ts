@@ -19,6 +19,10 @@ function dist(x: number, y: number): number {
 	return Math.sqrt(x*x + y*y);
 }
 
+function posmod(val: number, mod: number): number {
+	return ((val % mod) + mod) % mod;
+}
+
 /**
  * Returns the amplitudes for each speaker for a noise of unit amplitude at
  * the given coordinates.
@@ -29,7 +33,7 @@ function dist(x: number, y: number): number {
  */
 export function getAmplitudes(x0: number, y0: number): [number, number, number] {
 	const d0 = dist(x0, y0);
-	const theta = Math.atan2(y0, x0);
+	const theta = posmod(Math.atan2(y0, x0), 2 * Math.PI);
 
 	if (theta1 <= theta && theta < theta2) { // Case A - front pair
 		const dRatio = Math.pow(d1 / d0, 3);
