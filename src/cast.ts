@@ -71,6 +71,7 @@ export class Cast {
 	private started : boolean;
 
 	audio : AudioStager;
+	timeOffset : number;
 
 	castEntity : CastEntity;
 

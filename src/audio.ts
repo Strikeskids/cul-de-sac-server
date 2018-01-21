@@ -23,12 +23,15 @@ export interface Hold {
 	cb : (sources : Array<Source>) => any;
 }
 
+let start = Date.now();
+
 export class AudioStager extends Readable {
 	private queue : Array<Queue> = [];
 
 	private headTime : number = 0;
 	private paused : boolean = false;
 	private timer : NodeJS.Timer;
+	private start : number = 0;
 
 	sampleRate : number;
 
@@ -88,6 +91,7 @@ export class AudioStager extends Readable {
 	}
 
 	private _pushBuffer(buf : Buffer) : boolean {
+		process.stdout.write('' + (this.headTime - (Date.now() - this.start) / 1000) + '\r');
 		this.headTime += buf.length / this.sampleRate / bytesPerSample;
 		this.paused = false;
 		return this.push(buf);
@@ -102,8 +106,11 @@ export class AudioStager extends Readable {
 
 	private _handleSource() : boolean {
 		const src = this.queue.shift();
+		if (src === undefined) return false;
 
-		if (src === undefined) return true;
+		clearTimeout(this.timer);
+
+		console.log('Sending', src.kind);
 
 		switch (src.kind) {
 			case 'buffer':
@@ -175,25 +182,26 @@ export class AudioStager extends Readable {
 	}
 
 	_read(size : number) {
+		if (!this.start) this.start = Date.now();
+
 		this.paused = true;
 
-		while (this.queue.length > 0) {
-			clearTimeout(this.timer);
-
-			if (!this._handleSource()) {
-				return;
-			}
+		while (this._handleSource()) {
+			// Handle the queue
 		}
 
 		if (this.paused) {
 			this.timer = setTimeout(() => {
-				// There should be nothing in the queue AND we are paused
-				if (this.queue.length === 0) {
-					this._pushBuffer(zeroBuffer);
-				} else {
-					this._unpause();
-				}
-			}, zeroBuffer.length / this.sampleRate / bytesPerSample * 1000);
+					// There should be nothing in the queue AND we are paused
+					if (this.queue.length === 0) {
+						this._pushBuffer(zeroBuffer);
+					} else {
+						console.log('Skip', this.queue.length);
+					}
+				},
+				zeroBuffer.length / this.sampleRate / bytesPerSample * 1000 
+					+ (this.headTime * 1000 - (Date.now() - this.start)) / 2
+			);
 		}
 	}
 }
