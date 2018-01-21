@@ -73,7 +73,7 @@ export class Cast {
 	private sessionId : string | undefined;
 
 	audio : AudioStager;
-	timeOffset : number;
+	timeOffset : number = 0;
 
 	castEntity : CastEntity;
 

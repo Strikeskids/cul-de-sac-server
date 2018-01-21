@@ -39,37 +39,37 @@ let order = [
 	'1a7465ef1a47f71c16e00777ddbd9763',
 ];
 
-new Promise(resolve => setTimeout(resolve, 3000))
-.then(() => autosync([...caster.casts.values()], 10000))
-.then(() => {
-	let casts = order.map((id) => {
-		let cast = caster.casts.get(id);
-		if (cast === undefined) throw 'Hello';
-		return cast;
-	});
+// new Promise(resolve => setTimeout(resolve, 3000))
+// .then(() => autosync([...caster.casts.values()], 10000))
+// .then(() => {
+// 	let casts = order.map((id) => {
+// 		let cast = caster.casts.get(id);
+// 		if (cast === undefined) throw 'Hello';
+// 		return cast;
+// 	});
 
-	let time = 0;
+// 	let time = 0;
 
-	setInterval(() => {
-		time++;
-		const x = Math.cos(time * Math.PI / 4);
-		const y = Math.sin(time * Math.PI / 4);
+// 	setInterval(() => {
+// 		const x = Math.cos(time * Math.PI / 4) *2;
+// 		const y = Math.sin(time * Math.PI / 4) * 2;
+// 		time++;
 
-		let amplitudes = getAmplitudes(x, y);
-		console.log(x, y, amplitudes);
+// 		let amplitudes = getAmplitudes(x, y);
+// 		console.log(x, y, amplitudes);
 
-		sync(casts.map((cast, idx) => {
-			return {
-				stager: cast.audio,
-				offset: cast.timeOffset,
-				source: {
-					kind: 'array',
-					data: generateSineWave(sampleRate, 500, 2).map(x => x * amplitudes[idx]),
-				} as Source,
-			};
-		}));
-	}, 5000);
-});
+// 		sync(casts.map((cast, idx) => {
+// 			return {
+// 				stager: cast.audio,
+// 				offset: cast.timeOffset,
+// 				source: {
+// 					kind: 'array',
+// 					data: generateSineWave(sampleRate, 500, 2).map(x => x * amplitudes[idx]),
+// 				} as Source,
+// 			};
+// 		}));
+// 	}, 5000);
+// });
 
 // fs.readFile('song.wav').then((wavdata) => 
 // 	WavDecoder.decode(wavdata)
