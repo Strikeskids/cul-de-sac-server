@@ -73,7 +73,7 @@ export class Cast {
 	private sessionId : string | undefined;
 
 	audio : AudioStager;
-	timeOffset : number;
+	timeOffset : number = 0;
 
 	castEntity : CastEntity;
 
@@ -138,7 +138,9 @@ export class Cast {
 				console.error('Error', err);
 				this.client.close();
 			});
-			this.client.connect(this.castEntity.ip, resolve);
+			this.client.connect(this.castEntity.ip, () => {
+				resolve(this.client);
+			});
 		});
 	}
 
