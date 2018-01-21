@@ -24,7 +24,7 @@ server.listen(port, () => {
 const chirp : Source = {
 	kind: 'array',
 	data: generateSineWave(sampleRate, 1000, 0.05).map((a) => a / 10),
-}
+};
 
 fs.readFile('song.wav').then((wavdata) => 
 	WavDecoder.decode(wavdata)
@@ -38,7 +38,7 @@ fs.readFile('song.wav').then((wavdata) =>
 			sync([...caster.casts.values()].map((cast, i) => {
 				return { 
 					stager: cast.audio,
-					offset: offsets[i],
+					offset: cast.timeOffset,
 					source: chirp,
 				}
 			}));

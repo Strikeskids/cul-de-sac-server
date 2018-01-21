@@ -42,6 +42,15 @@ export class AudioStager extends Readable {
 		this.sampleRate = sampleRate;
 	}
 
+	reset() {
+		this.queue = [];
+		if (this.paused)
+			this.push(zeroBuffer.slice(0, 2));
+		this.paused = false;
+		clearTimeout(this.timer);
+		this.start = 0;
+	}
+
 	currentTime() : Promise<number> {
 		if (this.queue.length === 0) {
 			return Promise.resolve(this.headTime);

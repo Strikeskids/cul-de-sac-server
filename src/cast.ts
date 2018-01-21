@@ -69,6 +69,8 @@ export class CastBrowser {
 export class Cast {
 	private encoder : Encoder;
 	private started : boolean;
+	private client : CastClient;
+	private sessionId : string | undefined;
 
 	audio : AudioStager;
 	timeOffset : number;
@@ -99,6 +101,24 @@ export class Cast {
 		this.ip = getIp();
 	}
 
+	reset () {
+		this.audio.reset();
+		this.audio.unpipe(this.encoder);
+		this.started = false;
+		
+		const sessionId = this.sessionId;
+		this.sessionId = undefined;
+
+		if (sessionId !== undefined) {
+			new Promise((resolve, reject) => {
+				this.client.stop(sessionId, (err : Error | null) => {
+					if (err !== null) reject(err);
+					else resolve();
+				});
+			}).then(() => this.launchMedia());
+		}
+	}
+
 	output() : NodeJS.ReadableStream {
 		if (!this.started) {
 			this.started = true;
@@ -108,39 +128,54 @@ export class Cast {
 		return this.encoder;
 	}
 
-	launchMedia () {
-		let host = this.castEntity.ip;
-		let client = new CastClient();
+	connect () : Promise<CastClient> {
+		if (this.client !== undefined && !this.client.closed) 
+			return Promise.resolve(this.client);
 
-		client.connect(host, () => {
-			console.log('Connected to %s', host);
-
-			client.launch(DefaultMediaReceiver, (err : any, player : any) => {
-				const media = {
-					contentId: 'http://' + this.ip + ':' + this.port + '/' + this.url,
-					contentType: 'audio/mpeg3',
-					streamType: 'LIVE',
-
-					metadata: {
-						type: 0,
-						metadataType: 0,
-						title: 'Beamformer',
-					},
-				};
-
-				player.load(media, { autoplay: true }, (err : any, status : string) => {
-				});
+		return new Promise((resolve) => {
+			this.client = new CastClient();
+			this.client.on('error', (err) => {
+				console.error('Error', err);
+				this.client.close();
 			});
+			this.client.connect(this.castEntity.ip, resolve);
 		});
+	}
 
-		client.on('error', (err) => {
-			console.error('Error', err);
-			client.close();
+	launchMedia () {
+		this.connect().then((client) => 
+			new Promise((resolve, reject) => 
+				client.launch(DefaultMediaReceiver, (err : Error | null, player : any) => {
+					if (err !== null) reject(err);
+					else resolve(player);
+				})
+			)
+		).then((player : any) => {
+			this.sessionId = player.session.sessionId;
+			const media = {
+				contentId: 'http://' + this.ip + ':' + this.port + '/' + this.url,
+				contentType: 'audio/mpeg3',
+				streamType: 'LIVE',
+
+				metadata: {
+					type: 0,
+					metadataType: 0,
+					title: 'Beamformer',
+				},
+			};
+
+			return new Promise((resolve, reject) => 
+				player.load(media, { autoplay: true }, (err : Error | null, status : string) => {
+					if (err !== null) reject(err);
+					else resolve(status);
+				})
+			);
 		});
 	}
 }
 
 export class CastApplication {
+	byIp : Map<string, Cast>;
 	casts : Map<string, Cast>;
 
 	app : express.Application;
@@ -152,11 +187,12 @@ export class CastApplication {
 		this.port = port;
 
 		this.casts = new Map();
+		this.byIp = new Map();
 		this.app = express();
 
 		this.app.get(`/${this.url}`, (req, res) => {
 			const incomingIP = parseIP(req.ip);
-			const cast = this.casts.get(incomingIP);
+			const cast = this.byIp.get(incomingIP);
 
 			if (cast !== undefined) {
 				console.log('Casting to', incomingIP);
@@ -181,7 +217,8 @@ export class CastApplication {
 
 	addStream (audio : AudioStager, castEntity : CastEntity) : Cast {
 		let cast = new Cast(audio, castEntity, this.port, this.url);
-		this.casts.set(castEntity.ip, cast);
+		this.byIp.set(castEntity.ip, cast);
+		this.casts.set(castEntity.id, cast);
 		return cast;
 	}
 }
