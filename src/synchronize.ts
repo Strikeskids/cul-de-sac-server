@@ -1,7 +1,7 @@
 import * as express from 'express';
 import * as shortid from 'shortid';
 
-import { CastApplication } from './cast';
+import { CastApplication, Cast } from './cast';
 import { Source, sync } from './audio';
 import { Deferred, generateSineWave } from './utils';
 
@@ -21,6 +21,9 @@ export class Synchronizer {
 		this.socket.on('delay', this._delayCast)
 		this.socket.on('chirp', this._chirp);
 		this.socket.on('info', this._castInfo);
+		this.socket.on('disconnect', () => {
+			clearInterval(this.chirpTimer);
+		});
 	}
 
 	private casts() {
@@ -43,21 +46,7 @@ export class Synchronizer {
 	private _chirp = (start : boolean) => {
 		clearInterval(this.chirpTimer);
 		if (!start) return;
-
-		this.chirpTimer = setInterval(() => {
-			let casts = this.casts();
-
-			sync(casts.map((cast, idx) => {
-				return {
-					stager: cast.audio,
-					offset: cast.timeOffset,
-					source: {
-						kind: 'array',
-						data: generateSineWave(cast.audio.sampleRate, idx * 100 + 400, 0.05),
-					} as Source,
-				};
-			}));
-		}, 2000);
+		this.chirpTimer = chirp(this.casts());
 	}
 
 	private _delayCast = (idx : number, duration : number) => {
@@ -76,20 +65,35 @@ export class Synchronizer {
 			return;
 		}
 
-		let casts = this.casts();
-
 		this.synchronizing = true;
-
-		Promise.all(casts.map(cast => cast.audio.currentTime()))
-		.then(() => 
-			new Promise((resolve) => setTimeout(resolve, msg.duration))
-		).then(() => 
-			Promise.all(casts.map(cast => cast.audio.currentTime())),
-		).then(offsets => {
-			casts.forEach((cast, i) => {
-				cast.timeOffset = offsets[i];
-			});
-			this.synchronizing = false;
-		});
+		autosync(this.casts(), duration).then(() => this.synchronizing = false);
 	}
+}
+
+export function chirp(casts : Array<Cast>, interval = 2000) : NodeJS.Timer {
+	return setInterval(() => {
+		sync(casts.map((cast, idx) => {
+			return {
+				stager: cast.audio,
+				offset: cast.timeOffset,
+				source: {
+					kind: 'array',
+					data: generateSineWave(cast.audio.sampleRate, idx * 100 + 400, 0.05),
+				} as Source,
+			};
+		}));
+	}, interval);
+}
+
+export function autosync(casts : Array<Cast>, duration : number) : Promise<void> {
+	return Promise.all(casts.map(cast => cast.audio.currentTime()))
+	.then(() => 
+		new Promise((resolve) => setTimeout(resolve, duration))
+	).then(() => 
+		Promise.all(casts.map(cast => cast.audio.currentTime())),
+	).then(offsets => 
+		casts.forEach((cast, i) => {
+			cast.timeOffset = offsets[i];
+		})
+	);
 }

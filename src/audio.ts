@@ -225,7 +225,6 @@ export function sync(points : Array<SyncPoint>) : Promise<void> {
 		.then((times) => {
 			const offsets = points.map(({ offset }, index) => offset - times[index]);
 			const minOffset = Math.min(...offsets);
-			console.log(minOffset, offsets);
 
 			points.forEach(({ stager, source }, index) => {
 				holds[index].cb([

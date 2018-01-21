@@ -138,7 +138,9 @@ export class Cast {
 				console.error('Error', err);
 				this.client.close();
 			});
-			this.client.connect(this.castEntity.ip, resolve);
+			this.client.connect(this.castEntity.ip, () => {
+				resolve(this.client);
+			});
 		});
 	}
 
