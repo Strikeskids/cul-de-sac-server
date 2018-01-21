@@ -1,6 +1,8 @@
 import * as express from 'express';
 import * as SocketIO from 'socket.io';
+import * as WavDecoder from 'wav-decoder';
 import { Server } from 'http';
+import * as fs from 'fs-extra';
 
 import { AudioStager, sync, Source } from './audio';
 import { Cast, CastBrowser, CastApplication } from './cast';
@@ -46,10 +48,15 @@ function chirpStream(idx : number, total : number) : Source {
 	return result;
 }
 
-new Promise((resolve) => setTimeout(resolve, 10000))
-.then(() => {
-	return Promise.all([...caster.casts.values()].map((cast) => cast.audio.currentTime()));
-}).then((offsets) => {
+new Promise((resolve) => setTimeout(resolve, 20000))
+.then(() => 
+	Promise.all([...caster.casts.values()].map((cast) => cast.audio.currentTime())),
+).then((offsets) =>
+	Promise.all([
+		offsets, 
+		fs.readFile('song.wav').then((wavdata) => WavDecoder.decode(wavdata)),
+	])
+).then(([offsets, song]) => {
 	setInterval(() => {
 		sync([...caster.casts.values()].map((cast, i) => {
 			return { 
@@ -59,6 +66,16 @@ new Promise((resolve) => setTimeout(resolve, 10000))
 			}
 		}));
 	}, 2000);
+	// sync([...caster.casts.values()].map((cast, i) => {
+	// 	return { 
+	// 		stager: cast.audio,
+	// 		offset: offsets[i],
+	// 		source: {
+	// 			kind: 'array',
+	// 			data: [...song.channelData[0]],
+	// 		} as Source,
+	// 	};
+	// }));
 });
 
 io.on('connection', (socket) => {
