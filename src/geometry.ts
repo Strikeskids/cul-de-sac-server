@@ -1,5 +1,7 @@
 "use strict";
 
+import * as assert from "assert";
+
 // Constants for the positions of the speakers
 // Speaker 1 (Chirp) should be x units to the left and y1 units in front of the user
 // Speaker 2 (Squawk) should be x units to the right and y1 units in front of the user
@@ -40,18 +42,27 @@ export function getAmplitudes(x0: number, y0: number): [number, number, number] 
 		const a1 = (theta - theta1) / diff;
 		const a2 = 1 - a1;
 		const a3 = 0;
+		assert(0 <= a1 && a1 <= 1);
+		assert(0 <= a2 && a2 <= 1);
+		assert(0 <= a3 && a3 <= 1);
 		return [a1, a2, a3];
 	} else if (theta2 <= theta && theta < theta3) { // Case B - left pair
 		const diff = theta3 - theta2;
 		const a3 = (theta - theta2) / diff;
 		const a2 = 0;
 		const a1 = 1 - a3;
+		assert(0 <= a1 && a1 <= 1);
+		assert(0 <= a2 && a2 <= 1);
+		assert(0 <= a3 && a3 <= 1);
 		return [a1, a2, a3];
 	} else { // Case C - right pair
-		const diff = theta1 + Math.PI * 2 - theta3;
+		const diff = theta1 + Math.PI * 2 - theta3; // 2.245537
 		const a1 = 0;
-		const a2 = posmod((theta - theta3) / diff, Math.PI * 2);
+		const a2 = posmod(theta - theta3, Math.PI * 2) / diff;
 		const a3 = 1 - a2;
+		assert(0 <= a1 && a1 <= 1);
+		assert(0 <= a2 && a2 <= 1);
+		assert(0 <= a3 && a3 <= 1);
 		return [a1, a2, a3];
 	}
 }
