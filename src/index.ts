@@ -7,7 +7,7 @@ import * as fs from 'fs-extra';
 import { AudioStager, sync, Source } from './audio';
 import { Cast, CastBrowser, CastApplication } from './cast';
 import { generateSineWave } from './utils';
-import { Synchronizer, autosync, chirp } from './synchronize';
+import { Synchronizer, autosync, startChirping } from './synchronize';
 import { getAmplitudes } from './geometry';
 
 const sampleRate = 44100;
@@ -23,16 +23,50 @@ server.listen(port, () => {
 });
 
 
-io.on('connection', (socket) => new Synchronizer(socket, caster));
+io.on('connection', (socket) => {
+	console.log('New Synchronizer');
+	new Synchronizer(socket, caster);
+});
 
-new Promise(resolve => setTimeout(resolve, 3000))
-.then(() => autosync([...caster.casts.values()], 10000))
-.then(() => chirp([...caster.casts.values()]))
+const chirp : Source = {
+	kind: 'array',
+	data: generateSineWave(sampleRate, 1000, 0.05).map((a) => a / 10),
+};
 
-// const chirp : Source = {
-// 	kind: 'array',
-// 	data: generateSineWave(sampleRate, 1000, 0.05).map((a) => a / 10),
-// };
+let order = [
+	'658b7cbc2f2ccba278ddc91f12f50102',
+	'98790a8ee42ab38e307b119c1c229231',
+	'1a7465ef1a47f71c16e00777ddbd9763',
+];
+
+// new Promise(resolve => setTimeout(resolve, 3000))
+// .then(() => autosync([...caster.casts.values()], 10000))
+// .then(() => {
+// 	let casts = order.map((id) => {
+// 		let cast = caster.casts.get(id);
+// 		if (cast === undefined) throw 'Hello';
+// 		return cast;
+// 	});
+
+// 	setInterval(() => {
+// 		let x = (Math.random() * 2 - 1) * 5;
+// 		let y = (Math.random() * 2 - 1) * 5;
+
+// 		let amplitudes = getAmplitudes(x, y);
+// 		console.log(x, y, amplitudes);
+
+// 		sync(casts.map((cast, idx) => {
+// 			return {
+// 				stager: cast.audio,
+// 				offset: cast.timeOffset,
+// 				source: {
+// 					kind: 'array',
+// 					data: generateSineWave(sampleRate, 500, 2).map(x => x * amplitudes[idx]),
+// 				} as Source,
+// 			};
+// 		}));
+// 	}, 5000);
+// });
 
 // fs.readFile('song.wav').then((wavdata) => 
 // 	WavDecoder.decode(wavdata)

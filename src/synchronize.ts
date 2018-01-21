@@ -46,7 +46,7 @@ export class Synchronizer {
 	private _chirp = (start : boolean) => {
 		clearInterval(this.chirpTimer);
 		if (!start) return;
-		this.chirpTimer = chirp(this.casts());
+		this.chirpTimer = startChirping(this.casts());
 	}
 
 	private _delayCast = (idx : number, duration : number) => {
@@ -70,7 +70,7 @@ export class Synchronizer {
 	}
 }
 
-export function chirp(casts : Array<Cast>, interval = 2000) : NodeJS.Timer {
+export function startChirping(casts : Array<Cast>, interval = 2000) : NodeJS.Timer {
 	return setInterval(() => {
 		sync(casts.map((cast, idx) => {
 			return {
