@@ -44,8 +44,8 @@ export class Synchronizer {
 		console.log('Send timestamp', id, freq);
 		const session = this.sessions.get(id);
 		if (session !== undefined) {
-			const sine1 = generateSineWave(session.audio.sampleRate, freq, 1);
-			const sine2 = generateSineWave(session.audio.sampleRate, 400, 1);
+			const sine1 = generateSineWave(session.audio.sampleRate, freq, 0.2);
+			const sine2 = generateSineWave(session.audio.sampleRate, 400, 0.2);
 			session.startTime = session.audio.appendFloats(
 				sine1.map((a, i) => sine1[i] / 2 + sine2[i] / 20)
 			);

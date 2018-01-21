@@ -12,12 +12,14 @@ const port = 5555;
 
 const chirp : Source = {
 	kind: 'array',
-	data: generateSineWave(sampleRate, 600, 0.5),
+	data: generateSineWave(sampleRate, 1000, 0.05).map((a) => a / 10),
 }
 
 const caster = new CastApplication(port);
 let http = new Server(caster.app);
 let io = SocketIO(http);
+
+let seen = false;
 
 new CastBrowser(x => {
 	caster.addStream(new AudioStager(sampleRate), x).launchMedia();
@@ -26,16 +28,12 @@ new CastBrowser(x => {
 function chirpStream(idx : number, total : number) : Source {
 	let events : Source[] = [
 		{
-			kind: 'silence',
-			duration: idx * 0.5,
-		},
-		{
 			kind: 'array',
-			data: generateSineWave(sampleRate, 500, 0.5).map((a) => a / 10),
+			data: generateSineWave(sampleRate, 1000, 0.05).map((a) => a / 10),
 		},
 		{
 			kind: 'silence',
-			duration: (total - idx - 1) * 0.5,
+			duration: .5,
 		},
 	];
 
@@ -48,14 +46,27 @@ function chirpStream(idx : number, total : number) : Source {
 	return result;
 }
 
+new Promise((resolve) => setTimeout(resolve, 10000))
+.then(() => {
+	return Promise.all([...caster.casts.values()].map((cast) => cast.audio.currentTime()));
+}).then((offsets) => {
+	setInterval(() => {
+		sync([...caster.casts.values()].map((cast, i) => {
+			return { 
+				stager: cast.audio,
+				offset: offsets[i],
+				source: chirp,
+			}
+		}));
+	}, 2000);
+});
+
 io.on('connection', (socket) => {
 	console.log('Got connection');
 	const syncer = new Synchronizer(socket);
 	const casts = [...caster.casts.values()];
 	Promise.all(
 		casts.map((cast) => syncer.synchronize(cast.castEntity.id, cast.audio))
-	// ).then((offsets) =>
-	// 	Promise.all(casts.map((cast) => syncer.synchronize(cast.castEntity.id, cast.audio)))
 	).then((offsets) => {
 		sync(casts.map((cast, i) => {
 			return { 

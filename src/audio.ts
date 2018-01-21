@@ -3,6 +3,7 @@ import { Deferred, seconds } from './utils';
 
 const zeroBuffer = Buffer.alloc(8192);
 const bytesPerSample = 2;
+const silenceLength = 0.01;
 const maxSample = (1 << 15) - 1;
 
 export type Source =
@@ -94,6 +95,7 @@ export class AudioStager extends Readable {
 		if (buf.length === 0) {
 			return true;
 		}
+		process.stdout.write((this.headTime - (Date.now() - this.start) / 1000) + '\r');
 		this.headTime += buf.length / this.sampleRate / bytesPerSample;
 		this.paused = false;
 		return this.push(buf);
@@ -111,8 +113,6 @@ export class AudioStager extends Readable {
 		if (src === undefined) return false;
 
 		clearTimeout(this.timer);
-
-		console.log('Sending', src.kind);
 
 		switch (src.kind) {
 			case 'buffer':
@@ -192,12 +192,11 @@ export class AudioStager extends Readable {
 
 		if (this.paused) {
 			const sleepDuration = 
-				(zeroBuffer.length / this.sampleRate / bytesPerSample * 1000 
-					+ (this.headTime * 1000 - (Date.now() - this.start)) / 2) | 0;
+				(silenceLength + (this.headTime * 1000 - (Date.now() - this.start)) / 2 + 0) | 0;
 
 			clearTimeout(this.timer);
 			this.timer = setTimeout(() => {
-					this.append({ kind: 'buffer', data: zeroBuffer });
+					this.append({ kind: 'silence', duration: silenceLength });
 					this._read(1);
 				},
 				sleepDuration,
