@@ -95,7 +95,6 @@ export class AudioStager extends Readable {
 		if (buf.length === 0) {
 			return true;
 		}
-		process.stdout.write((this.headTime - (Date.now() - this.start) / 1000) + '\r');
 		this.headTime += buf.length / this.sampleRate / bytesPerSample;
 		this.paused = false;
 		return this.push(buf);

@@ -155,12 +155,11 @@ export class CastApplication {
 		this.app = express();
 
 		this.app.get(`/${this.url}`, (req, res) => {
-			console.log(parseIP(req.ip));
-
 			const incomingIP = parseIP(req.ip);
 			const cast = this.casts.get(incomingIP);
 
 			if (cast !== undefined) {
+				console.log('Casting to', incomingIP);
 				res.set({
 					'Content-Type': 'audio/mpeg3',
 					'Transfer-Encoding': 'chunked',
@@ -168,9 +167,15 @@ export class CastApplication {
 
 				cast.output().pipe(res);
 			} else {
-				console.log(incomingIP);
+				console.log('Unknown cast', incomingIP);
 				res.sendStatus(404);
 			}
+		});
+	}
+
+	autoload (sampleRate : number) {
+		new CastBrowser(x => {
+			this.addStream(new AudioStager(sampleRate), x).launchMedia();
 		});
 	}
 

@@ -12,42 +12,18 @@ import { Synchronizer } from './synchronize';
 const sampleRate = 44100;
 const port = 5555;
 
+const caster = new CastApplication(port);
+let server = new Server(caster.app);
+let io = SocketIO(server);
+
+caster.autoload(sampleRate);
+server.listen(port, () => {
+	console.log('Started server on', port);
+});
+
 const chirp : Source = {
 	kind: 'array',
 	data: generateSineWave(sampleRate, 1000, 0.05).map((a) => a / 10),
-}
-
-const caster = new CastApplication(port);
-let http = new Server(caster.app);
-let io = SocketIO(http);
-
-let seen = false;
-
-let idx = 0;
-
-new CastBrowser(x => {
-	caster.addStream(new AudioStager(sampleRate), x).launchMedia();
-});
-
-function chirpStream(idx : number, total : number) : Source {
-	let events : Source[] = [
-		{
-			kind: 'array',
-			data: generateSineWave(sampleRate, 1000, 0.05).map((a) => a / 10),
-		},
-		{
-			kind: 'silence',
-			duration: .5,
-		},
-	];
-
-	let result : Source = {
-		kind: 'hold',
-		data: Promise.resolve(events),
-	};
-	events.push(result);
-
-	return result;
 }
 
 fs.readFile('song.wav').then((wavdata) => 
@@ -58,28 +34,25 @@ fs.readFile('song.wav').then((wavdata) =>
 	.then(() => 
 		Promise.all([...caster.casts.values()].map((cast) => cast.audio.currentTime())),
 	).then((offsets) => {
-		// setInterval(() => {
-		// 	sync([...caster.casts.values()].map((cast, i) => {
-		// 		return { 
-		// 			stager: cast.audio,
-		// 			offset: offsets[i],
-		// 			source: chirp,
-		// 		}
-		// 	}));
-		// }, 2000);
-		sync([...caster.casts.values()].map((cast, i) => {
-			return { 
-				stager: cast.audio,
-				offset: offsets[i],
-				source: {
-					kind: 'buffer',
-					data: data,
-				} as Source,
-			};
-		}));
+		setInterval(() => {
+			sync([...caster.casts.values()].map((cast, i) => {
+				return { 
+					stager: cast.audio,
+					offset: offsets[i],
+					source: chirp,
+				}
+			}));
+		}, 2000);
+		// sync([...caster.casts.values()].map((cast, i) => {
+		// 	return { 
+		// 		stager: cast.audio,
+		// 		offset: offsets[i],
+		// 		source: {
+		// 			kind: 'buffer',
+		// 			data: data,
+		// 		} as Source,
+		// 	};
+		// }));
 	});
 });
 
-http.listen(port, () => {
-	console.log('Started server on', port);
-});
